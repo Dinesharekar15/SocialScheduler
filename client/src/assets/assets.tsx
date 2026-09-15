@@ -160,6 +160,7 @@ export const dummyAccountsData = [
         updatedAt: "2026-05-19T11:15:04.799Z",
         user: "69fd96aea59dd584d3587a1d",
     },
+     
 ];
 
 export const dummyActivityData = [
