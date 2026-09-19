@@ -1,7 +1,7 @@
 import express from "express";
 import { generatePost, getGenerations, getPosts, schedulePost } from "../controllers/postController.js";
 import { upload } from "../config/multer.js";
-import { protect } from "../middelwares/authMiddlewware.js";
+import { protect } from "../middlewares/authMiddlewware.js";
 
 const postRouter = express.Router();
 
