@@ -54,74 +54,79 @@ export const generatePost = async (req: AuthRequest, res: Response,): Promise<vo
         }
 
         const ai = new GoogleGenAI({ apiKey });
-        // Generate Text
-        const textResponse = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: `Generate a social media post based on this prompt: "${prompt}". 
-            Tone: ${tone}. 
-            Include relevant hashtags.
-            Format the response as JSON with "content" and "imagePrompt" fields. 
-            The "imagePrompt" should be a highly descriptive prompt for an image generator that complements the post.`,
-        });
+        const candidateModels = [
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-2.0-flash-exp",
+            "gemini-2.0-flash",
+            "gemini-2.5-flash",
+            "gemini-3.6-flash"
+        ];
+        let textResponse: any = null;
+
+        const promptContent = `Generate a social media post based on this prompt: "${prompt}". 
+Tone: ${tone}. 
+Include relevant hashtags.
+Format the response as JSON with "content" and "imagePrompt" fields. 
+The "imagePrompt" should be a highly descriptive prompt for an image generator that complements the post.`;
+
+        for (const modelName of candidateModels) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: modelName,
+                    contents: promptContent,
+                });
+                if (response && response.text) {
+                    textResponse = response;
+                    console.log(`Successfully generated content using model: ${modelName}`);
+                    break;
+                }
+            } catch (err: any) {
+                console.warn(`Gemini model ${modelName} unavailable/busy:`, err?.message || err);
+            }
+        }
 
         let content = "";
         let imagePrompt = prompt;
 
-        try {
-            const rawText = textResponse.text || "";
-            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-            const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { content: rawText, imagePrompt: prompt };
-            content = data.content;
-            imagePrompt = data.imagePrompt;
-        } catch (e) {
-            content = textResponse.text || ""
+        if (textResponse && textResponse.text) {
+            try {
+                let rawText = textResponse.text || "";
+                rawText = rawText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { content: rawText, imagePrompt: prompt };
+                content = data.content || rawText;
+                imagePrompt = data.imagePrompt || prompt;
+            } catch (e) {
+                content = textResponse.text || "";
+            }
+        } else {
+            console.warn("All Gemini models busy. Using fallback post generator.");
+            content = `🚀 ${prompt}\n\nExcited to share our latest updates regarding "${prompt}". Stay tuned for more insights!\n\n#${tone.toLowerCase()} #updates #trending #social`;
+            imagePrompt = prompt;
         }
 
         let mediaUrl = "";
 
-        // if(generateImage){
-        //    try {
-        //     const leonardoKey = process.env.LEONARDO_API_KEY;
-        //     if(leonardoKey){
-        //         // Use Leonardo.ai for image generation
-        //         const leoResponse = await axios.post(
-        //             "https://cloud.leonardo.ai/api/rest/v2/generations",
-        //             {
-        //                 "public": false,
-        //                 "model": "gpt-image-2",
-        //                 "parameters": {
-        //                     "quality": "LOW",
-        //                     "prompt": imagePrompt,
-        //                     "quantity": 1,
-        //                     "width": 1024,
-        //                     "height": 1024,
-        //                     "prompt_enhance": "OFF"
-        //                 }
-        //             },{
-        //                 headers:{
-        //                     accept: "application/json",
-        //                     authorization: `Bearer ${leonardoKey}`,
-        //                     "content-type": "application/json",
-        //                 }
-        //             }
-        //         )
+        if (generateImage) {
+            try {
+                // Pollinations.ai provides free AI image generation without API keys
+                const encodedPrompt = encodeURIComponent(imagePrompt || prompt);
+                const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
 
-        //         const generationId = leoResponse.data.generate.generationId;
-        //         const tempUrl = await pollLeonardoJob(generationId, leonardoKey);
-
-        //         // Upload to Cloudinary for persistence
-        //         const uploadResult = await cloudinary.uploader.upload(tempUrl, {
-        //             folder: "ai-generations",
-        //         });
-        //         mediaUrl = uploadResult.secure_url;
-        //     }
-        //    } catch (err: any) {
-        //         console.error("Image generation failed:", err);
-        //    } 
-        // }
-
-
-
+                try {
+                    const uploadResult = await cloudinary.uploader.upload(pollinationsUrl, {
+                        folder: "ai-generations",
+                    });
+                    mediaUrl = uploadResult.secure_url;
+                } catch (cloudinaryErr: any) {
+                    console.warn("Cloudinary upload failed, falling back to direct Pollinations URL:", cloudinaryErr?.message || cloudinaryErr);
+                    mediaUrl = pollinationsUrl;
+                }
+            } catch (err: any) {
+                console.error("Image generation failed:", err);
+            }
+        }
 
         // Save generation to DB
         const generation = await Generation.create({
@@ -135,8 +140,10 @@ export const generatePost = async (req: AuthRequest, res: Response,): Promise<vo
 
         res.json(generation)
 
-    } catch (error) {
-        res.status(500).json({ message: error || "Server error" });
+    } catch (error: any) {
+        console.error("generatePost error:", error);
+        const errorMsg = error?.message || (typeof error === "string" ? error : "Failed to generate post with Gemini AI");
+        res.status(500).json({ message: errorMsg });
     }
 }
 
