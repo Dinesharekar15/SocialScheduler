@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import {  PLATFORMS } from "../assets/assets";
+import { PLATFORMS } from "../assets/assets";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
@@ -12,6 +12,7 @@ import api from "../api/axios";
 import toast from "react-hot-toast";
 const Scheduler = () => {
   const [posts, setPosts] = useState<any[]>([]);
+  const [userAccounts, setUserAccounts] = useState<any[]>([]);
   const [content, setContent] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
@@ -21,15 +22,27 @@ const Scheduler = () => {
 
   const fetchPosts = async () => {
     try {
-      const {data} = await api.get("/api/posts")
+      const { data } = await api.get("/api/posts")
       setPosts(data)
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error.message);
     }
   }
 
+  const fetchUserAccounts = async () => {
+    try {
+      const { data } = await api.get("/api/accounts");
+      setUserAccounts(data);
+    } catch (error: any) {
+      console.error("Failed to fetch user accounts", error);
+    }
+  };
+
   useEffect(() => {
-    (async () => await fetchPosts())();
+    (async () => {
+      await fetchPosts();
+      await fetchUserAccounts();
+    })();
     const interval = setInterval(async () => await fetchPosts(), 10000);
     return () => clearInterval(interval);
   }, []);
@@ -44,30 +57,65 @@ const Scheduler = () => {
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault()
-    if(selectedPlatforms.length === 0){
+    if (selectedPlatforms.length === 0) {
       toast.error("Select at least one platform");
       return;
     }
-    if(!scheduledDate || !scheduledTime){
+
+    // Check connected accounts for selected platforms
+    const connectedPlatforms = userAccounts
+      .filter((acc) => acc.status === "connected")
+      .map((acc) => acc.platform);
+
+    const missingPlatforms = selectedPlatforms.filter((p) => {
+      return !connectedPlatforms.some((cp) => cp === p || cp.includes(p) || p.includes(cp));
+    });
+
+    if (missingPlatforms.length > 0) {
+      const formattedNames = missingPlatforms
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(", ");
+      toast.error(`Please connect your ${formattedNames} account before scheduling a post.`);
+      return;
+    }
+
+    if (!scheduledDate || !scheduledTime) {
       toast.error("Select date and time");
       return;
     }
-    if(selectedPlatforms.includes('instagram') && !mediaFile){
+    if (selectedPlatforms.includes('instagram') && !mediaFile) {
       toast.error("Instagram requires an image or video");
       return;
     }
 
-    const scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
-    const formData = new FormData();
-    formData.append("content", content);
-    formData.append("scheduledFor", scheduledFor);
-    formData.append("status", "scheduled");
-    formData.append("platforms", JSON.stringify(selectedPlatforms));
-    if(mediaFile) formData.append("media", mediaFile);
+    const scheduledDateObj = new Date(`${scheduledDate}T${scheduledTime}`);
+    if (scheduledDateObj.getTime() < Date.now() - 60000) {
+      toast.error("Please select a future date and time");
+      return;
+    }
 
-    setLoading(true)
+    const scheduledFor = scheduledDateObj.toISOString();
+
+    setLoading(true);
     try {
-      await api.post("/api/posts", formData, {headers: {"Content-Type": "multipart/form-data"}})
+      if (mediaFile) {
+        const formData = new FormData();
+        formData.append("content", content);
+        formData.append("scheduledFor", scheduledFor);
+        formData.append("status", "scheduled");
+        formData.append("platforms", JSON.stringify(selectedPlatforms));
+        formData.append("media", mediaFile);
+
+        await api.post("/api/posts", formData);
+      } else {
+        await api.post("/api/posts", {
+          content,
+          scheduledFor,
+          status: "scheduled",
+          platforms: selectedPlatforms,
+        });
+      }
+
       toast.success("Post scheduled!");
       setContent("");
       setScheduledDate("");
@@ -75,9 +123,9 @@ const Scheduler = () => {
       setSelectedPlatforms([]);
       setMediaFile(null);
       fetchPosts();
-    } catch (error:any) {
-      toast.error(error?.response?.data?.message || error.message);
-    }finally{
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error.message || "Failed to schedule post");
+    } finally {
       setLoading(false);
     }
   }
@@ -242,75 +290,75 @@ const Scheduler = () => {
       <div className="flex-1 flex flex-col gap-6 min-w-0">
         {/* Upcoming */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-                <CalendarDaysIcon className="size-4 text-zinc-500"/>
-                <h3 className="text-slate-900 text-sm">Upcoming</h3>
-                <span className="ml-auto text-xs font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-full">{scheduled.length}</span>
-              </div>
-              <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
-                {scheduled.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400 text-sm">No posts scheduled yet</div>
-                ) : (
-                  scheduled.map((post)=>(
-                    <div key={post._id} className="px-5 py-4 hover:bg-slate-50/60 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                          <div className="flex gap-1.5 items-center">
-                            {post.platforms.map((pl: string)=>{
-                              const meta = PLATFORMS.find((p)=> p.id === pl);
-                              return meta ? <meta.icon key={pl} className="size-3.5 text-slate-400"/> : null
-                            })}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {post.mediaType && <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-md font-semibold capitalize">{post.mediaType}</span>}
-
-                            <span className="text-xs text-slate-400">{new Date(post.scheduledFor).toLocaleString()}</span>
-                          </div>
-                      </div>
-                          <p className="text-sm text-slate-500 line-clamp-2 max-w-md">{post.content}</p>
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+            <CalendarDaysIcon className="size-4 text-zinc-500" />
+            <h3 className="text-slate-900 text-sm">Upcoming</h3>
+            <span className="ml-auto text-xs font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-full">{scheduled.length}</span>
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+            {scheduled.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-sm">No posts scheduled yet</div>
+            ) : (
+              scheduled.map((post) => (
+                <div key={post._id} className="px-5 py-4 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex gap-1.5 items-center">
+                      {post.platforms.map((pl: string) => {
+                        const meta = PLATFORMS.find((p) => p.id === pl);
+                        return meta ? <meta.icon key={pl} className="size-3.5 text-slate-400" /> : null
+                      })}
                     </div>
-                  ))
-                )}
-              </div>
+                    <div className="flex items-center gap-2">
+                      {post.mediaType && <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-md font-semibold capitalize">{post.mediaType}</span>}
+
+                      <span className="text-xs text-slate-400">{new Date(post.scheduledFor).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-500 line-clamp-2 max-w-md">{post.content}</p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Published */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
-                <SendIcon className="size-4 text-zinc-500"/>
-                <h3 className="text-slate-900 text-sm">Published</h3>
-                <span className="ml-auto text-xs font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-full">{published.length}</span>
-              </div>
-              <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
-                {published.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400 text-sm">No published posts yet </div>
-                ) : (
-                  published.map((post)=>(
-                    <div key={post._id} className="px-5 py-4 hover:bg-slate-50/60 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                          <div className="flex gap-1.5 items-center">
-                            {post.platforms.map((pl: string)=>{
-                              const meta = PLATFORMS.find((p)=> p.id === pl);
-                              return meta ? <meta.icon key={pl} className="size-3.5 text-slate-400"/> : null
-                            })}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {post.mediaType && <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-md font-semibold capitalize">{post.mediaType}</span>}
-
-                            <span className="text-xs text-slate-400">{new Date(post.updatedAt).toLocaleString()}</span>
-                            <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full">Published</span>
-                          </div>
-                      </div>
-                          <p className="text-sm text-slate-500 line-clamp-2 max-w-4/5">{post.content}</p>
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100">
+            <SendIcon className="size-4 text-zinc-500" />
+            <h3 className="text-slate-900 text-sm">Published</h3>
+            <span className="ml-auto text-xs font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-full">{published.length}</span>
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
+            {published.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-sm">No published posts yet </div>
+            ) : (
+              published.map((post) => (
+                <div key={post._id} className="px-5 py-4 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex gap-1.5 items-center">
+                      {post.platforms.map((pl: string) => {
+                        const meta = PLATFORMS.find((p) => p.id === pl);
+                        return meta ? <meta.icon key={pl} className="size-3.5 text-slate-400" /> : null
+                      })}
                     </div>
-                  ))
-                )}
-              </div>
+                    <div className="flex items-center gap-2">
+                      {post.mediaType && <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-md font-semibold capitalize">{post.mediaType}</span>}
+
+                      <span className="text-xs text-slate-400">{new Date(post.updatedAt).toLocaleString()}</span>
+                      <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full">Published</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-500 line-clamp-2 max-w-4/5">{post.content}</p>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
 
       </div>
 
-      
+
     </div>
   );
 };

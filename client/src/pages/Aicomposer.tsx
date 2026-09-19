@@ -19,6 +19,7 @@ const Aicomposer = () => {
   const [generateImage, setGenerateImage] = useState(true);
   const [loading, setLoading] = useState(false);
   const [generations, setGenerations] = useState<any[]>([]);
+  const [userAccounts, setUserAccounts] = useState<any[]>([]);
 
   // Scheduling state
   const [activeScheduler, setActiveScheduler] = useState<any>(null);
@@ -36,8 +37,18 @@ const Aicomposer = () => {
     }
   };
 
+  const fetchUserAccounts = async () => {
+    try {
+      const { data } = await api.get("/api/accounts");
+      setUserAccounts(data);
+    } catch (error: any) {
+      console.error("Failed to fetch user accounts", error);
+    }
+  };
+
   useEffect(() => {
     fetchGenerations();
+    fetchUserAccounts();
   }, []);
 
   const handleGenerate = async () => {
@@ -68,14 +79,35 @@ const Aicomposer = () => {
       toast.error("Select at least one platform");
       return;
     }
+
+    const connectedPlatforms = userAccounts
+      .filter((acc) => acc.status === "connected")
+      .map((acc) => acc.platform);
+
+    const missingPlatforms = selectedPlatforms.filter((p) => {
+      return !connectedPlatforms.some((cp) => cp === p || cp.includes(p) || p.includes(cp));
+    });
+
+    if (missingPlatforms.length > 0) {
+      const formattedNames = missingPlatforms
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(", ");
+      toast.error(`Please connect your ${formattedNames} account before scheduling a post.`);
+      return;
+    }
+
     if (!scheduledDate || !scheduledTime) {
       toast.error("Select date and time");
       return;
     }
 
-    const scheduledFor = new Date(
-      `${scheduledDate}T${scheduledTime}`,
-    ).toISOString();
+    const scheduledDateObj = new Date(`${scheduledDate}T${scheduledTime}`);
+    if (scheduledDateObj.getTime() < Date.now() - 60000) {
+      toast.error("Please select a future date and time");
+      return;
+    }
+
+    const scheduledFor = scheduledDateObj.toISOString();
     setScheduling(true);
     try {
       await api.post("/api/posts", {

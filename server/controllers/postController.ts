@@ -1,8 +1,9 @@
 import { Response } from "express";
-import { AuthRequest } from "../middelwares/authMiddlewware.js"
+import { AuthRequest } from "../middlewares/authMiddlewware.js"
 import { GoogleGenAI } from "@google/genai";
 import { Generation } from "../models/Generation.js";
 import { Post } from "../models/Post.js";
+import { Account } from "../models/Account.js";
 import { cloudinary } from "../config/cloudinary.js";
 
 
@@ -41,19 +42,19 @@ import { cloudinary } from "../config/cloudinary.js";
 // POST /api/posts/generate
 
 
-export const generatePost=async (req: AuthRequest, res : Response, ): Promise<void> =>{
+export const generatePost = async (req: AuthRequest, res: Response,): Promise<void> => {
     try {
         const { prompt, tone, generateImage } = req.body;
 
         const apiKey = process.env.GEMINI_API_KEY;
 
-        if(!apiKey){
-            res.status(400).json({message: "Gemini API Key is missing. Please add it to your server/.env file." });
+        if (!apiKey) {
+            res.status(400).json({ message: "Gemini API Key is missing. Please add it to your server/.env file." });
             return;
         }
 
-        const ai= new GoogleGenAI({apiKey});
-         // Generate Text
+        const ai = new GoogleGenAI({ apiKey });
+        // Generate Text
         const textResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: `Generate a social media post based on this prompt: "${prompt}". 
@@ -66,10 +67,10 @@ export const generatePost=async (req: AuthRequest, res : Response, ): Promise<vo
         let content = "";
         let imagePrompt = prompt;
 
-         try {
+        try {
             const rawText = textResponse.text || "";
             const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-            const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {content: rawText, imagePrompt: prompt};
+            const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { content: rawText, imagePrompt: prompt };
             content = data.content;
             imagePrompt = data.imagePrompt;
         } catch (e) {
@@ -123,14 +124,14 @@ export const generatePost=async (req: AuthRequest, res : Response, ): Promise<vo
 
 
         // Save generation to DB
-          const generation = await Generation.create({
+        const generation = await Generation.create({
             user: req.user._id,
             prompt,
             content,
             mediaUrl,
             mediaType: mediaUrl ? "image" : undefined,
             tone
-          })
+        })
 
         res.json(generation)
 
@@ -144,7 +145,7 @@ export const generatePost=async (req: AuthRequest, res : Response, ): Promise<vo
 // GET /api/posts/generations
 export const getGenerations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const generations = await Generation.find({user: req.user._id}).sort({createdAt: -1})
+        const generations = await Generation.find({ user: req.user._id }).sort({ createdAt: -1 })
         res.json(generations)
     } catch (error: any) {
         res.status(500).json({ message: error?.message || "Server error" });
@@ -157,7 +158,7 @@ export const getGenerations = async (req: AuthRequest, res: Response): Promise<v
 // GET /api/posts
 export const getPosts = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const posts = await Post.find({user: req.user._id})
+        const posts = await Post.find({ user: req.user._id })
         res.json(posts)
     } catch (error: any) {
         res.status(500).json({ message: error?.message || "Server error" });
@@ -173,7 +174,7 @@ export const schedulePost = async (req: AuthRequest, res: Response): Promise<voi
 
         // Parse platforms if it comes as a stringified array from FormData
         let parsedPlatforms = platforms;
-        if(typeof platforms === "string"){
+        if (typeof platforms === "string") {
             try {
                 parsedPlatforms = JSON.parse(platforms)
             } catch (e) {
@@ -181,19 +182,48 @@ export const schedulePost = async (req: AuthRequest, res: Response): Promise<voi
             }
         }
 
+        if (!parsedPlatforms || !Array.isArray(parsedPlatforms) || parsedPlatforms.length === 0) {
+            res.status(400).json({ message: "Select at least one platform" });
+            return;
+        }
+
+        // Validate connected accounts for target user & platforms
+        const connectedAccounts = await Account.find({ user: req.user._id, status: "connected" });
+        const connectedPlatforms = connectedAccounts.map(a => a.platform);
+
+        const missingPlatforms = parsedPlatforms.filter((p: string) => {
+            return !connectedPlatforms.some(cp => cp === p || cp.includes(p) || p.includes(cp));
+        });
+
+        if (missingPlatforms.length > 0) {
+            const formattedNames = missingPlatforms.map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ");
+            res.status(400).json({
+                message: `No connected account found for ${formattedNames}. Please connect your account first.`
+            });
+            return;
+        }
+
         let mediaUrl: string | undefined = req.body.mediaUrl;
         let mediaType: "image" | "video" | undefined = req.body.mediaType;
 
-        if(req.file){
-            const result = await new Promise<any>((resolve, reject)=>{
-                const stream = cloudinary.uploader.upload_stream({resource_type: "auto", folder: "social-scheduler"}, (error, result)=>{
-                    if(error) reject(error);
-                    else resolve(result)
+        if (req.file) {
+            try {
+                const result = await new Promise<any>((resolve, reject) => {
+                    const stream = cloudinary.uploader.upload_stream({ resource_type: "auto", folder: "social-scheduler" }, (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result)
+                    });
+                    stream.end(req.file!.buffer);
                 });
-                stream.end(req.file!.buffer);
-            });
-            mediaUrl = result.secure_url;
-            mediaType = result.resource_type === "video" ? "video" : "image";
+                mediaUrl = result.secure_url;
+                mediaType = result.resource_type === "video" ? "video" : "image";
+            } catch (uploadError: any) {
+                console.error("Cloudinary upload failed:", uploadError);
+                res.status(400).json({
+                    message: `Image/Video upload failed (Cloudinary error): ${uploadError?.message || "Invalid API credentials"}`
+                });
+                return;
+            }
         }
 
         const post = await Post.create({

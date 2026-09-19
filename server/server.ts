@@ -34,10 +34,12 @@ app.use("/api/activity", activityRouter)
 // Initialize Scheduler
 initScheduler()
 
-app.use((err:any ,_req: Request , res: Response , _next: NextFunction)=>{
-    console.log(err);
-    res.status(500).send(err?.res?.data?.message || err?.message)
-})
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    console.error("Global Error:", err);
+    const status = err?.status || err?.statusCode || 500;
+    const message = err?.response?.data?.message || err?.message || "Internal Server Error";
+    res.status(status).json({ message });
+});
 
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
