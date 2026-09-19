@@ -33,7 +33,8 @@ const Aicomposer = () => {
       const { data } = await api.get("api/posts/generations");
       setGenerations(data);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message);
+      const errVal = error?.response?.data?.message || error?.message;
+      toast.error(typeof errVal === "string" ? errVal : "Failed to load generations");
     }
   };
 
@@ -67,7 +68,8 @@ const Aicomposer = () => {
       setActiveScheduler(data);
       toast.success("Content generated!");
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message);
+      const errVal = error?.response?.data?.message || error?.message;
+      toast.error(typeof errVal === "string" ? errVal : "Failed to generate AI post");
     } finally {
       setLoading(false);
     }
@@ -124,7 +126,8 @@ const Aicomposer = () => {
       setScheduledDate("");
       setScheduledTime("");
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to schedule");
+      const errVal = error?.response?.data?.message || error?.message;
+      toast.error(typeof errVal === "string" ? errVal : "Failed to schedule post");
     } finally {
       setScheduling(false);
     }
