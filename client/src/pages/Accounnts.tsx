@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { dummyAccountsData, PLATFORMS } from "../assets/assets";
 import AccountsList from '../components/AccountsList';
 import PlatformPickerModal from '../components/PlatformPickerModal';
+import toast from 'react-hot-toast';
+import api from '../api/axios';
 
 const Accounnts = () => {
   const [accounts, setAccounts] = useState<any[]>([])
@@ -10,28 +12,67 @@ const Accounnts = () => {
   const [showPlatformPicker, setShowPlatformPicker] = useState(false)
   
 
-  const fetchAccounts=async (isSync=false , platform ?: string | null , successMsg?: string) => {
-    setAccounts(dummyAccountsData);
-    console.log(isSync,platform,successMsg);  
+  const fetchAccounts = async (isSync = false, platform?: string | null, successMsg?: string) => {
+    try {
+      if(isSync){
+        const label = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "Social Media";
+        toast.loading(`Syncing ${label} account...`, {id: "sync"});
+        await api.get("/api/oauth/sync");
+        toast.success(successMsg || "Accounts synced!", { id: "sync" })
+      }
+
+      const {data} = await api.get("/api/accounts")
+      setAccounts(data)
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to load accounts");
+    }
   }
 
   useEffect(()=>{
-    fetchAccounts();
+
+    const params = new URLSearchParams(window.location.search);
+    const connectedPlatform = params.get("connected");
+    const connectedUsername = params.get("username");
+    const syncNeeded = params.get("sync") === "true";
+    const errorMsg = params.get("error");
+
+    window.history.replaceState({}, document.title, window.location.pathname)
+
+    if(connectedPlatform){
+      const label = connectedPlatform.charAt(0).toUpperCase() + connectedPlatform.slice(1);
+      const handle = connectedUsername ? ` (@${connectedUsername})` : ""
+      fetchAccounts(true, connectedPlatform, `${label}${handle} connected!`)
+    } else if(errorMsg){
+      toast.error(`Connection failed: ${decodeURIComponent(errorMsg)}`)
+      fetchAccounts();
+    } else if(syncNeeded){
+      fetchAccounts(true, null, "Accounts synced!")
+    } else{
+       fetchAccounts()
+    }
+   
   },[])
 
-  const handleConnect =async (platformId:string) => {
-    setConnecting(platformId)
-    setTimeout(() => {
+  const handleConnect = async (platformId: string) => {
+    setConnecting(platformId);
+    try {
+      const { data } = await api.get(`/api/oauth/${platformId}/url`);
+      window.location.href = data.url;
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || `Failed to connect ${platformId}`)
       setConnecting(null)
-      setAccounts((prev)=>[...prev, dummyAccountsData[0]])
-      setShowPlatformPicker(false);
-    }, 1000);
+    }
   }
 
-  const handleDisconnect= async (accountId: string) => {
-    setAccounts(accounts.filter((a)=>a._id!=accountId))
+  const handleDisconnect = async (accountId: string) => {
+    try {
+      await api.delete(`/api/accounts/${accountId}`)
+      toast.success("Account disconnected")
+      await fetchAccounts()
+    } catch (error : any) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to disconnect account")
+    }
   }
-
 
 
   const connectedIds = accounts.map((a)=>a.platform)
