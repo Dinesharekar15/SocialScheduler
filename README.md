@@ -77,7 +77,13 @@ flowchart TB
 - **Metrics Cards**: Displays live counts for Scheduled Posts, Published Posts, and Connected Social Accounts.
 - **Activity Feed**: Real-time event stream showing timestamps and platforms where posts were successfully published.
 
-> 📸 *Insert Screenshot: `./docs/screenshots/dashboard.png`*
+<br />
+
+<div align="center">
+  <img src="./docs/screenshots/dashboard.png" alt="Analytics Dashboard" width="100%" style="border-radius: 10px;" />
+</div>
+
+<br />
 
 ---
 
@@ -87,7 +93,13 @@ flowchart TB
 - **Pre-Flight Validation**: Validates connected accounts and alerts users if a selected platform is not connected before scheduling.
 - **Queue Panels**: Displays separate scrollable feeds for **Upcoming Scheduled Posts** and **Published History**.
 
-> 📸 *Insert Screenshot: `./docs/screenshots/scheduler.png`*
+<br />
+
+<div align="center">
+  <img src="./docs/screenshots/scheduler.png" alt="Post Scheduler" width="100%" style="border-radius: 10px;" />
+</div>
+
+<br />
 
 ---
 
@@ -97,7 +109,13 @@ flowchart TB
 - **Zero-Downtime Generation**: Generates post copy, hashtags, and complementary AI image artwork.
 - **Instant Scheduling Modal**: Schedule generated content directly into your queue without leaving the page.
 
-> 📸 *Insert Screenshot: `./docs/screenshots/ai-composer.png`*
+<br />
+
+<div align="center">
+  <img src="./docs/screenshots/ai-composer.png" alt="AI Content Studio" width="100%" style="border-radius: 10px;" />
+</div>
+
+<br />
 
 ---
 
@@ -106,7 +124,11 @@ flowchart TB
 - **Platform Picker Modal**: Connect social media handles through secure OAuth redirect flows.
 - **Status Indicators**: Visual badges indicating whether platforms are **Connected** or **Disconnected**.
 
-> 📸 *Insert Screenshot: `./docs/screenshots/accounts.png`*
+<br />
+
+<div align="center">
+  <img src="./docs/screenshots/accounts.png" alt="Connected Accounts" width="100%" style="border-radius: 10px;" />
+</div>
 
 ---
 
