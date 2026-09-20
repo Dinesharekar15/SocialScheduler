@@ -21,13 +21,6 @@
 
 **SocialScheduler** is built to solve the fragmentation and overhead of managing social media campaigns across multiple networks. By combining **Google Gemini AI**, **Pollinations.ai Image Generation**, **Cloudinary CDN Storage**, **Zernio Social OAuth**, and an automated **Node-Cron background worker**, SocialScheduler provides an end-to-end publishing pipeline.
 
-### Why Recruiters & Engineers Love This Project:
-- 🛡️ **Zero-Downtime AI Engine**: Multi-tier model fallback mechanism ensuring AI content generation succeeds even during external API downtime or high-demand spikes (503/404 errors).
-- ⏱️ **Automated Background Cron Worker**: Independent cron service querying due posts every 60 seconds and publishing via Zernio OAuth SDK.
-- 🖼️ **Hybrid Media Streaming**: Supports text-only JSON payloads and multipart `FormData` image/video uploads with automatic Cloudinary stream persistence.
-- 🔒 **Secure Auth & Token Management**: JWT authentication with bcrypt password hashing and persistent headers.
-
----
 
 ## ✨ Key Features
 
@@ -169,7 +162,7 @@ flowchart TB
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/SocialScheduler.git
+git clone https://github.com/Dinesharekar15/SocialScheduler.git
 cd SocialScheduler
 ```
 
